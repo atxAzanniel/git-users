@@ -49,6 +49,7 @@ const MapView: React.FC = () => {
     })
 
     setDev(newDev)
+    setUsername('')
     setLoading(false)
   }
 
