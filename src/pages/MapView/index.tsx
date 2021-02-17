@@ -3,39 +3,39 @@ import Map, { Callout, Marker, PROVIDER_GOOGLE, Region } from 'react-native-maps
 import { RectButton } from 'react-native-gesture-handler'
 import * as Location from 'expo-location'
 import { FontAwesome } from '@expo/vector-icons'
-import { View, Text, TextInput, Alert } from 'react-native'
+import { View, Text, TextInput, Alert, ActivityIndicator, Linking } from 'react-native'
 
 import { Dev, fetchUserGithub, fetchLocalMapBox } from '../../services/apiGithub'
 
 import styles from './styles'
 
-const initialRegion = {
-  latitude: -3.033434,
-  longitude: -59.972489,
-  latitudeDelta: 90,
-  longitudeDelta: 90
-}
-
 const MapView: React.FC = () => {
   const [region, setRegion] = useState<Region>()
   const [username, setUsername] = useState<string>()
-  const [devs, setDevs] = useState<Dev[]>([])
+  const [loading, setLoading] = useState(false)
+  const [dev, setDev] = useState<Dev | null>()
 
   const handleSearchUser = async () => {
     if (!username) return
 
+    setLoading(true)
+
     const githubUser = await fetchUserGithub(username)
     if (!githubUser || !githubUser.location) {
+      setLoading(false)
+      setDev(null)
       Alert.alert(
         'Ops!',
-        'Usuário não encontrado ou não tem localização definida no Github'
+        'Usuário não encontrado ou não tem localização definida no Github',
+        [{ text: 'Vou procurar outro !' }]
       )
+      return
     }
 
     const localMapBox = await fetchLocalMapBox(githubUser.location)
     const [longitude, latitude] = localMapBox.features[0].center
 
-    const dev: Dev = {
+    const newDev: Dev = {
       ...githubUser,
       latitude,
       longitude
@@ -48,12 +48,12 @@ const MapView: React.FC = () => {
       longitudeDelta: 0.20
     })
 
-    const devAlreadyExists = dev && devs.find((user) => user.id === dev.id)
+    setDev(newDev)
+    setLoading(false)
+  }
 
-    if (devAlreadyExists) return
-
-    setDevs([...devs, dev])
-    setUsername('')
+  const handleOpenGithub = (url: string) => {
+    Linking.openURL(url)
   }
 
   useEffect(() => {
@@ -80,47 +80,62 @@ const MapView: React.FC = () => {
         showsUserLocation
         showsMyLocationButton={false}
         showsCompass={false}
-        initialRegion={initialRegion}
+        initialRegion={{
+          latitude: -3.033434,
+          longitude: -59.972489,
+          latitudeDelta: 90,
+          longitudeDelta: 90
+        }}
         region={region}
         provider={PROVIDER_GOOGLE}
       >
-        {devs.map((dev) => (
-          <Marker
-            key={dev.id}
-            image={{ uri: `${dev.avatar_url}&s=120` }}
-            calloutAnchor={{
-              x: 2.4,
-              y: 1.2
-            }}
-            coordinate={{
-              latitude: Number(dev.latitude),
-              longitude: Number(dev.longitude)
-            }}
-          >
-            <Callout tooltip onPress={() => {}}>
-              <View style={styles.calloutContainer}>
-                <Text style={styles.calloutText}>{dev.name ?? dev.login}</Text>
-                <Text style={styles.calloutSmallText}>{dev.bio ?? 'Sem bio'}</Text>
-              </View>
-            </Callout>
-          </Marker>
-        ))}
+        {
+          dev
+            ? (
+            <Marker
+              key={dev.id}
+              image={{ uri: `${dev.avatar_url}&s=120` }}
+              calloutAnchor={{
+                x: 2.4,
+                y: 1.2
+              }}
+              coordinate={{
+                latitude: Number(dev.latitude),
+                longitude: Number(dev.longitude)
+              }}
+            >
+              <Callout tooltip onPress={() => { handleOpenGithub(dev.html_url) }}>
+                <View style={styles.calloutContainer}>
+                  <Text style={styles.calloutText}>{dev.name ?? dev.login}</Text>
+                  <Text style={styles.calloutSmallText}>{dev.bio ?? 'Sem bio'}</Text>
+                </View>
+              </Callout>
+            </Marker>
+              )
+            : null
+        }
       </Map>
 
       <View style={styles.footer}>
         <TextInput
           style={styles.footerText}
           autoCompleteType='off'
-          placeholder={`${devs.length} Dev's encontrados`}
+          placeholder='Informe um usuário do Github'
           onChangeText={setUsername}
+          onSubmitEditing={handleSearchUser}
           value={username}
         />
 
         <RectButton
           style={styles.searchUserButton}
           onPress={handleSearchUser}
+          enabled={!loading}
         >
-          <FontAwesome name="github" size={24} color="#fff" />
+          {
+            loading
+              ? <ActivityIndicator color="#fff" />
+              : <FontAwesome name="github" size={24} color="#fff" />
+          }
         </RectButton>
       </View>
     </View>
